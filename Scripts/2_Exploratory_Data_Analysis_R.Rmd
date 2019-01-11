@@ -1,0 +1,663 @@
+---
+title: "Exploratory Data Analysis 2 with R"
+author: "Fabien Plisson"
+date: "25/07/2018"
+output: html_document
+---
+# Set up working directory
+```{r setup, include=FALSE}
+setwd("/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/")
+getwd()
+```
+
+# Install libraries
+```{r}
+install.packages("caret", dependencies=TRUE)
+install.packages("corrplot")
+library(lattice)
+library(ggplot2)
+library(caret)
+library(corrplot)
+
+install.packages(c("cluster", "ggplot2", "factoextra", "purrr"), dependencies = TRUE)
+library(cluster)
+library(ggplot2)
+library(factoextra)
+library(purrr)
+```
+
+
+# Load dataset
+
+```{r}
+df <- read.csv("/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/Data/DESCRIPTORS/datasetDescrs.csv", header = TRUE)
+df
+```
+
+```{r}
+logBB_df <- read.csv("/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/Data/logBB_values.csv", header = TRUE)
+logBB_df
+```
+
+```{r}
+start_bin <- binwidth * floor(min(logBB_df$logBB) / binwidth)
+# compute breaks and bin the data
+breaks <- seq(start_bin, max(logBB_df$logBB) + binwidth, by = binwidth)
+logBB_df2 <- cut(sort(logBB_df$logBB), breaks = breaks, by = binwidth)
+mypal <- colorRampPalette( brewer.pal( 6 , "RdBu" ) )
+
+ggplot() + geom_col(aes(x = head(breaks, -1L), 
+                        y = as.integer(table(logBB_df2)), fill= mypal)) + 
+  ylab("count") + xlab("logBB values") + 
+```
+
+```{r}
+f <- hist(logBB_df$logBB, breaks=30)
+dat <- data.frame(counts= f$counts, breaks = f$mids)
+ggplot(dat, aes(x = breaks, y = counts, fill = f$mids)) +
+  geom_bar(stat = "identity",alpha = 0.8) +
+  xlab("logBB values") + ylab("Frequency") +
+  scale_x_continuous(breaks = seq(-3,3,0.5),
+                   labels = seq(-3,3,0.5)) + 
+  scale_fill_gradient2(low="darkblue", mid= "lightgrey", high="darkred") +
+  theme_bw()
+
+```
+
+# Clean up dataset
+```{r}
+# 1. first column = row indices
+df <- data.frame(df[,-1], row.names=df[,1]) #968 200
+# 2. Remove missing values
+df <- na.omit(df)
+dim(df) # 967 200 (omit CPSM347)
+```
+
+# Scaling features prior feature selection
+```{r}
+df_norm <- scale(df)
+dim(df_norm)
+```
+
+# Feature Reduction with Variance threshold - Near Zero-Variance with nearZeroVar()
+```{r}
+nearZeroVar(df_norm_corr, names=TRUE)
+```
+
+# New dataset without features of low or no variance
+```{r}
+df_new <- df_norm[, -nearZeroVar(df_norm_corr)]
+dim(df_new)
+write.csv(df_new, "/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/Data/DESCRIPTORS/datasetDescrs_181.csv")
+
+```
+
+# Correlation matrix
+```{r}
+df_new_corr <- cor(df_new, method= "pearson")
+head(round(df_new_corr,2))
+
+#df_norm_corr2 <- na.omit(df_norm_corr)
+#head(round(df_new_corr2,2))
+```
+
+
+# Correlograms
+```{r}
+# Correlogram 1
+#pdf("../Figures/Figure1_Correlogram1.pdf", width=40, height=40) 
+#corrplot(df_new_corr, method="color", title="Correlogram dataset 137 descriptors", type="upper", order="hclust")
+#dev.off()
+
+# Correlogram 2
+pdf("../Figures/FigureSI_Correlogram_Spearman_181variables.pdf", width=12, height=12) 
+#corrplot.mixed(df_new_corr, method="square", type="upper", order="hclust", tl.col="black", tl.srt=45, title="Correlogram dataset 181 descriptors")
+corrplot(df_new_corr, method="color", type="upper", order="hclust", tl.col="black", tl.srt=90, tl.cex = 0.45, lower.col = "black", number.cex = 0.45)
+dev.off()
+
+# Correlogram 3
+#pdf("../Figures/Figure1_Correlogram3.pdf", width=40, height=40) 
+#corrplot(df_new_corr, method="number", type="upper", order="hclust", tl.col="black", tl.srt=45, title="Correlogram dataset 137 descriptors")
+#dev.off()
+```
+
+# Removing highly correlated features from original dataset
+```{r}
+highly_corr <- findCorrelation(df_new_corr, cutoff = .90, names=TRUE)
+dim(df_new)
+
+# Dropping highly correlated colums
+df_reduced <- df_new[,!colnames(df_new) %in% highly_corr]
+dim(df_reduced)
+write.csv(df_reduced, "/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/Data/DESCRIPTORS/datasetDescrs_142.csv")
+
+
+df_reduced_2 <- df[,!colnames(df) %in% highly_corr]
+dim(df_reduced_2)
+write.csv(df_reduced_2, "/Users/fabienplisson/Desktop/PLISSON LAB/RESEARCH/Publications/12_Marine-derived_kinase_inhibitors_BBB_model/Data/DESCRIPTORS/datasetDescrs_161.csv")
+
+```
+```{r}
+df_final_corr <- cor(df_final, method="pearson")
+head(round(df_final_corr,2))
+
+pdf("../Figures/Figure1_Correlogram_39descrs_P_small.pdf", width=7, height=7) 
+corrplot(df_final_corr, method="color", type="upper", order="hclust", tl.col="black", tl.srt=45, tl.cex = 0.7, lower.col = "black", number.cex = 0.7)
+dev.off()
+```
+
+# Original dataset with 200 descriptors
+```{r}
+df_norm_corr <- cor(df_norm, method= "spearman", use="everything")
+head(round(df_norm_corr,2))
+```
+
+```{r}
+pdf("../Figures/Figure1_Correlogram5.pdf", width=40, height=40) 
+corrplot(df_norm_corr, method="color", type="upper", tl.col="black", tl.srt=45, title="Correlogram dataset 200 descriptors")
+dev.off()
+```
+
+# K-means clustering with full dataset (967 rows and 200 descriptors)
+```{r}
+df_norm <- scale(df)
+#summary(df_norm)
+dim(df_norm)
+```
+
+```{r}
+df_no_NA <- df_norm[, -nearZeroVar(df_norm)]
+dim(df_no_NA)
+```
+# Dissimilarity (distance) matrices
+
+```{r}
+distance <- get_dist(df_no_NA, stand = TRUE, method = "euclidean")
+pdf("../Figures/Figure4_DissimilarityMatrix_spearman.pdf", width=10, height=10, title = "Dissimilarity matrix (Euclidean)")
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"), lab_size=0.5)
+dev.off()
+
+```
+
+```{r}
+distance <- get_dist(df_no_NA, stand = TRUE, method = "pearson")
+pdf("../Figures/Figure4_DissimilarityMatrix_pearson.pdf", width=10, height=10, title = "Dissimilarity matrix (Pearson)")
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"), lab_size=0.5)
+dev.off()
+
+```
+
+```{r}
+distance <- get_dist(df_no_NA, stand = TRUE, method = "spearman")
+pdf("../Figures/Figure4_DissimilarityMatrix_spearman.pdf", width=10, height=10, title = "Dissimilarity matrix (Spearman)")
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"), lab_size=0.5)
+dev.off()
+
+```
+
+
+
+```{r}
+# K-means clustering
+## With 2 clusters
+k2 <- kmeans(df_no_NA, centers = 2, nstart = 25)
+k2
+
+# Visualise 2 clusters
+fviz_cluster(k2, data = df_no_NA) 
+eclust(df_no_NA, "kmeans", k = 2)
+
+## With 3,4 and 5 clusters
+k3 <- kmeans(df_no_NA, centers = 3, nstart = 25)
+k4 <- kmeans(df_no_NA, centers = 4, nstart = 25)
+k5 <- kmeans(df_no_NA, centers = 5, nstart = 25)
+```
+
+```{r}
+## Creating and comparing clustering plots
+p1 <- fviz_cluster(k2, geom = "point", data = df_no_NA) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point",  data = df_no_NA) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point",  data = df_no_NA) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point",  data = df_no_NA) + ggtitle("k = 5")
+
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+```{r}
+# Optimizing k clusters
+# 1. The Elbow method (bend close to the lowest wss value)
+set.seed(123)
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(df_no_NA, k, nstart = 10)$tot.withinss}
+
+# Compute and plot wss for k = 1 to k = 15
+k.values <- 1:15
+
+# Extract wss for 2-15 clusters
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+# With K-means clustering, we were able to see that some compounds are distantly related to the CPSMs group. We will now investigate another method principal component analysis to map the 3 groups based on the accounted variability of their features. The loadings will give us the features that best separate / distinguish the 3 groups.
+
+```{r}
+# Install libraries
+install.packages("tidyverse", dependencies=TRUE)
+install.packages("gridExtra")
+library(tidyverse)  # data manipulation and visualization
+library(gridExtra)  # plot arrangement
+```
+```{r}
+# Calculate principal components
+# 1. calculate eigenvalues & eigenvectors (loadings)
+compounds.cov <- cov(df_no_NA)
+compounds.eigen <- eigen(compounds.cov)
+str(compounds.eigen)
+```
+```{r}
+# 2. Extract the loadings for PCs
+phi <-  compounds.eigen$vectors[,1:2]
+phi <- -phi # change sign
+row.names(phi) <- as.vector(colnames(df_no_NA))
+colnames(phi) <- c("PC1", "PC2")
+phi
+```
+
+```{r}
+# 3. Calculate Principal Components scores
+PC1 <- as.matrix(df_no_NA) %*% phi[,1]
+PC2 <- as.matrix(df_no_NA) %*% phi[,2]
+```
+
+```{r}
+# 4. Create data frame with Principal Components scores
+PC <- data.frame(Compounds = row.names(df_norm), PC1, PC2)
+head(PC)
+```
+```{r}
+# 5. Plot Principal Components for each State
+ggplot(PC, aes(PC1, PC2)) + 
+  modelr::geom_ref_line(h = 0) +
+  modelr::geom_ref_line(v = 0) +
+  geom_text(aes(label = Compounds), size = 3) +
+  xlab("First Principal Component") + 
+  ylab("Second Principal Component") + 
+  ggtitle("First Two Principal Components of CPSMs, KDs, MDKIs Data")
+```
+```{r}
+# Proportion of Variance Explained
+PVE <- compounds.eigen$values / sum(compounds.eigen$values)
+round(PVE, 2)
+```
+
+```{r}
+# PVE (aka scree) plot
+PVEplot <- qplot(c(1:137), PVE) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("PVE") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1)
+
+# Cumulative PVE plot
+cumPVE <- qplot(c(1:137), cumsum(PVE)) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab(NULL) + 
+  ggtitle("Cumulative Scree Plot") +
+  ylim(0,1)
+
+grid.arrange(PVEplot, cumPVE, ncol = 2)
+```
+```{r}
+## Build-in PCA function prcomp()
+pca_result <- prcomp(df_no_NA, retx = TRUE, center=FALSE, scale = FALSE)
+names(pca_result)
+
+# means
+pca_result$center
+
+# standard deviation
+pca_result$sdev
+
+# scale
+pca_result$scale
+
+# loadings
+pca_result$rotation
+
+# principal components scores
+pca_result$x
+
+# Visualise 2 first PCs
+pca_result$rotation <- -pca_result$rotation
+pca_result$x <- -pca_result$x
+
+biplot(pca_result, scale = 0)
+
+# Proportion of Variance Explained (from standard deviations)
+VE <- pca_result$sdev^2
+PVE <- VE / sum(VE)
+round(PVE, 2)
+```
+```{r}
+library(factoextra)
+pca_result <- prcomp(df_no_NA, scale = FALSE)
+names(pca_result)
+
+pdf("../Figures/Figure2.5_PCA_Screeplot.pdf", width=8, height=5, title = "Principal Component Analysis - Screeplot")
+fviz_eig(pca_result, addlabels=TRUE, hjust = -0.3)
+#get_eig(pca_result)
+dev.off()
+```
+```{r}
+#groups <- as.factor(df$)
+pdf("../Figures/Figure2.5_PCA_Individuals.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_result,
+             col.ind = "cos2", # Color by the quality of representation
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+```{r}
+#Subset PCA
+pca_sub <- prcomp(df_no_NA[332:967,], retx = TRUE, center=FALSE, scale = FALSE)
+names(pca_sub)
+
+pca_sub$rotation <- -pca_sub$rotation
+pca_sub$x <- -pca_sub$x
+
+# Subset dataset to contain only holdout_set (636 compounds) for colouring
+models <- read.csv("../Data/holdout_set_probs_class0.csv", header=TRUE)
+models_df <- models[,-1]
+rownames(models_df) <- models[,1]
+models_df$model1
+
+
+# Report predictions on PCA using vector models1-6
+pdf("../Figures/Figure2.6_PCA_Individuals_model1_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model1,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model1 \nprob class 0",
+             repel = FALSE # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model2_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model2,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model2 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model3_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model3,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model3 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model4_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model4,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model4 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model5_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model5,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model5 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model6_PC1vsPC2.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             col.ind = models_df$model6,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model6 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+```{r}
+#Subset PCA
+pca_sub <- prcomp(df_no_NA[332:967,], retx = TRUE, center=FALSE, scale = FALSE)
+names(pca_sub)
+
+pca_sub$rotation <- -pca_sub$rotation
+pca_sub$x <- -pca_sub$x
+
+# Subset dataset to contain only holdout_set (636 compounds) for colouring
+models <- read.csv("../Data/holdout_set_probs_class0.csv", header=TRUE)
+models_df <- models[,-1]
+rownames(models_df) <- models[,1]
+models_df$model1
+
+
+# Report predictions on PCA using vector models1-6
+pdf("../Figures/Figure2.6_PCA_Individuals_model1_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model1,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model1 \nprob class 0",
+             repel = FALSE # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model2_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model2,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model2 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model3_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model3,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model3 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model4_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model4,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model4 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model5_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model5,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model5 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.6_PCA_Individuals_model6_PC1vsPC3.pdf", width=20, height=10, title = "Principal Component Analysis - Individuals")
+fviz_pca_ind(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model6,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model6 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+```{r}
+pdf("../Figures/Figure2.8_PCA_Variables_model1_PC1vsPC2.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_sub,
+             axes = c(1, 2),
+             col.ind = models_df$model1,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model1 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.8_PCA_Variables_model1_PC1vsPC3.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_sub,
+             axes = c(1, 3),
+             col.ind = models_df$model1,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model1 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.8_PCA_Variables_model1_PC2vsPC3.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_sub,
+             axes = c(2, 3),
+             col.ind = models_df$model1,
+             gradient.cols = c("darkred", "white", "darkblue"),
+             legend.title = "model1 \nprob class 0",
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+```{r}
+pdf("../Figures/Figure2.7_PCA_Variables_PC1vsPC2.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_result,
+             axes = c(1,2),
+             col.var = "contrib", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.7_PCA_Variables_PC1vsPC3.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_result,
+             axes = c(1,3),
+             col.var = "contrib", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+
+pdf("../Figures/Figure2.7_PCA_Variables_PC2vsPC3.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_result,
+             axes = c(2,3),
+             col.var = "contrib", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+
+# Create groups
+```{r}
+df$df_group <- NA
+df$df_group[1:447] <- "blue" 
+df$df_group[448:496] <- "red" 
+df$df_group[497:967] <- "green"
+df_group <- as.vector(df$df_group)
+```
+
+```{r}
+
+pdf("../Figures/Figure5_PCA_Individuals_RGB.pdf", width=15, height=15, title = "Principal Component Analysis - Individuals per Group")
+fviz_pca_ind(pca_result,
+             #col.ind = df$df_group, # Color by the quality of representation
+             #gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             #repel = FALSE, # Text overlapping
+             label="none",
+             geom = "point",
+             pointsize = 2,
+             #addEllipses=TRUE, 
+             #ellipse.level=0.98,
+             #alpha.ind = 0,
+             groupName="Groups",
+             ) + theme_minimal() + scale_color_manual(values=c("#D11C34", "#2B9224", "#2A79D4")) + geom_point(aes(color=df_group))
+dev.off()
+```
+
+```{r}
+pdf("../Figures/Figure5_PCA_Variables_top30.pdf", width=8, height=8, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_result, 
+             col.var="black",
+             #alpha.var="contrib",
+             geom.var = c("point", "text"),
+             select.var = list(contrib = 30),
+             #gradient.cols = c("light grey", "grey", "black"), 
+             repel = TRUE     # Text overlapping
+             )
+dev.off()
+```
+
+```{r}
+pdf("../Figures/Figure5_PCA_Variables_2.pdf", width=15, height=15, title = "Principal Component Analysis - Variables", pointsize = 20)
+fviz_pca_var(pca_result, 
+             col.var = "black", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = FALSE     # Text overlapping
+             )
+dev.off()
+```
+
+```{r}
+pdf("../Figures/Figure5_PCA_Biplot.pdf", width=20, height=10, title = "Principal Component Analysis - Biplot")
+fviz_pca_biplot(pca_result, repel = FALSE,
+                col.ind = "#2E9FDF", # Variables color
+                col.var = "#696969"  # Individuals color
+                )
+dev.off()
+```
+```{r}
+pdf("../Figures/Figure5_PCA_Biplot_2.pdf", width=20, height=10, title = "Principal Component Analysis - Biplot")
+fviz_pca_biplot(pca_result, repel = FALSE,
+                col.var = "black", # Variables color
+                col.ind = df_group  # Individuals color
+                )
+dev.off()
+```
+
+```{r}
+# Eigenvalues
+eig.val <- get_eigenvalue(pca_result)
+eig.val
+  
+# Results for Variables
+res.var <- get_pca_var(pca_result)
+res.var$coord          # Coordinates
+res.var$contrib        # Contributions to the PCs
+res.var$cos2           # Quality of representation 
+# Results for individuals
+res.ind <- get_pca_ind(pca_result)
+res.ind$coord          # Coordinates
+res.ind$contrib        # Contributions to the PCs
+res.ind$cos2           # Quality of representation 
+```
+
+
+# The dissimilarity matrix suggest there are different clusters of compounds. The PCA results confirm that some compounds, especially MDKIs, are distantly related to the ones i.e. CPSMs we will be using for training the models. According to the features' contributions, they differ from the main group (mix of CPSMs, KDs, MDKIs) by their MW, VSA, NOCount, BertzCT, NumAromaticRings, RingCount, HBD/HBAs etc... These observations suggest that the training set should have hard time to predict the logBB for such compounds (most distant structurally). We should take into consideration SVM or Bayesian modelling and take into uncertainty values from our predictions.
+
+
+
